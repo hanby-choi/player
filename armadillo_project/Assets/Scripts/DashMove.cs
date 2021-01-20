@@ -1,9 +1,14 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class DashMove : MonoBehaviour
 {
+    //max 체력과 현재 체력 변수
+    public int maxHealth = 100;
+    public int currentHealth;
+
     public Vector2 speed_vec; //플레이어 속도 벡터
     public float speed; //이동 속도
     private Rigidbody2D rb; //리지드바디
@@ -13,12 +18,17 @@ public class DashMove : MonoBehaviour
     public bool isDash; //대쉬 여부
 
     public bool isUnBeatTime; //무적 여부
-
+    public bool isDie = false; //죽음 여부
+    public bool beShot;
     public bool isDelay; //딜레이 여부
     public float delayTime = 0.5f; //대쉬 딜레이 시간
 
     SpriteRenderer spriteRenderer; //스프라이트 렌더러
     Animator anim; //애니메이터
+
+    //hp바, fill area 조절
+    private Slider HpBar;
+    private GameObject fillArea;
 
     void Start()
     {
@@ -26,11 +36,35 @@ public class DashMove : MonoBehaviour
         dashTime = startDashTime;
         spriteRenderer = GetComponent<SpriteRenderer>();
         anim = GetComponent<Animator>();
+
+        currentHealth = maxHealth;
+
+        //슬라이더 오브젝트 찾아고 hp값 초기화
+        if (GameObject.FindGameObjectWithTag("hpslider"))
+            HpBar = (Slider)FindObjectOfType(typeof(Slider));
+        HpBar.value = 1f;
+        //fill area 찾기
+        fillArea = GameObject.FindWithTag("fillarea");
     }
 
 
     void Update()
     {
+        //체력 체크해서 죽음 판정
+        if (currentHealth == 0)
+        {
+            //fill area 비활성화로 0임을 표시
+            fillArea.gameObject.SetActive(false);
+
+            if (!isDie)
+                Die();
+            return;
+        }
+
+        //체력바에 현재 체력 구현
+        if (currentHealth != 0)
+            HpBar.value = (float)currentHealth / (float)100;
+
         //애니메이션 - 스프라이트 방향 전환
         if (Input.GetButtonDown("Horizontal"))
         {
@@ -89,7 +123,37 @@ public class DashMove : MonoBehaviour
                 StartCoroutine("UnBeatTime"); //무적모드
             }
         }
+        //hp_bar 이동 범위 제한 함으로써 아르마딜로 오브젝트를 따라다니게 함
+        if (currentHealth != 0)
+            HpBar.transform.position = Camera.main.WorldToScreenPoint(transform.position + new Vector3(-0.02f, 0.5f, 0));
 
+    }
+    void Die()
+    {
+
+        isDie = true;
+        HpBar.gameObject.SetActive(false);
+        Destroy(gameObject);
+
+
+    }
+
+    //탄환과 충돌 판정
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        beShot = true; //탄환과 충돌
+        if (collision.CompareTag("bullet") && isUnBeatTime == false) //탄환과 만났고, 무적타임이 아닐 시
+        {
+            Debug.Log("탄환 피격");
+
+            //체력 25감소
+            currentHealth = currentHealth - 25;
+            Debug.Log("탄환에 피격됐습니다 현재 체력은" + currentHealth);
+
+            //탄환 피격 시 3초 간 무적모드
+            StartCoroutine("UnBeatTime");
+
+        }
     }
 
     //대쉬 딜레이
@@ -108,12 +172,34 @@ public class DashMove : MonoBehaviour
         //무적모드 플래그 t 변경
         isUnBeatTime = true;
 
-        while (countTime < 5)
+        //대시 시 무적모드 
+        if (isDash)
         {
-            //0.5초간 딜레이
-            yield return new WaitForSeconds(0.1f);
-            countTime++;
+            while (countTime < 5)
+            {
+                //0.5초간 딜레이
+                yield return new WaitForSeconds(0.1f);
+                countTime++;
+            }
         }
+        //피격 시 무적모드
+        else if (beShot)
+        {
+            while (countTime < 30)
+            {
+                //알파값 수정해서 깜빡이도록 
+                if (countTime % 2 == 0)
+                    spriteRenderer.color = new Color32(255, 255, 255, 90);
+                else
+                    spriteRenderer.color = new Color32(255, 255, 255, 180);
+                //3초간 딜레이
+                yield return new WaitForSeconds(0.1f);
+                countTime++;
+            }
+        }
+
+        //알파값 원상 복귀
+        spriteRenderer.color = new Color32(255, 255, 255, 255);
 
         //무적모드 아님
         isUnBeatTime = false;
